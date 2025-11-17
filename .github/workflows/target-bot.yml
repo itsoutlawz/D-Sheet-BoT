@@ -8,7 +8,7 @@ on:
       max_profiles:
         description: 'Max Profiles (0 = unlimited)'
         required: false
-        default: '100'
+        default: '200'
       batch_size:
         description: 'Batch Size'
         required: false
@@ -63,12 +63,13 @@ jobs:
           DAMADAM_USERNAME_2: ${{ secrets.DAMADAM_USERNAME_2 }}
           DAMADAM_PASSWORD_2: ${{ secrets.DAMADAM_PASSWORD_2 }}
           GOOGLE_SHEET_URL: ${{ secrets.GOOGLE_SHEET_URL }}
-          MAX_PROFILES_PER_RUN: ${{ github.event.inputs.max_profiles || '0' }}
+          MAX_PROFILES_PER_RUN: ${{ github.event.inputs.max_profiles || '200' }}
           BATCH_SIZE: ${{ github.event.inputs.batch_size || '20' }}
           MIN_DELAY: '0.4'
-          MAX_DELAY: '0.6'
+          MAX_DELAY: '0.5'
           PAGE_LOAD_TIMEOUT: '30'
-          SHEET_WRITE_DELAY: '1.0'
+          SHEET_WRITE_DELAY: '1.2'
         run: |
           python Scraper.py
+
 
