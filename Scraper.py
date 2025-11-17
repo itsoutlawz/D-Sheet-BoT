@@ -15,6 +15,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -76,6 +77,88 @@ def convert_relative_date_to_absolute(text:str)->str:
     if unit in s_map:
         dt=get_pkt_time()-timedelta(seconds=amt*s_map[unit]); return dt.strftime("%d-%b-%y")
     return text
+
+def clean_text(text:str)->str:
+    if not text: return ""
+    text=str(text).strip().replace('\xa0',' ').replace('\n',' ')
+    return re.sub(r"\s+"," ", text).strip()
+
+def parse_post_timestamp(text:str)->str:
+    return convert_relative_date_to_absolute(text)
+
+def to_absolute_url(href:str)->str:
+    if not href: return ""
+    href=href.strip()
+    if href.startswith('/'):
+        return f"https://damadam.pk{href}"
+    if not href.startswith('http'):
+        return f"https://damadam.pk/{href}"
+    return href
+
+def get_friend_status(driver)->str:
+    try:
+        page_source=driver.page_source.lower()
+        if 'action="/follow/remove/"' in page_source or 'unfollow.svg' in page_source:
+            return "Yes"
+        if 'follow.svg' in page_source and 'unfollow' not in page_source:
+            return "No"
+        return ""
+    except Exception:
+        return ""
+
+def extract_text_comment_url(href:str)->str:
+    m=re.search(r'/comments/text/(\d+)/', href or '')
+    if m:
+        return to_absolute_url(f"/comments/text/{m.group(1)}/").rstrip('/')
+    return to_absolute_url(href or '')
+
+def extract_image_comment_url(href:str)->str:
+    m=re.search(r'/comments/image/(\d+)/', href or '')
+    if m:
+        return to_absolute_url(f"/content/{m.group(1)}/g/")
+    return to_absolute_url(href or '')
+
+def scrape_recent_post(driver, nickname:str)->dict:
+    post_url=f"https://damadam.pk/profile/public/{nickname}"
+    try:
+        driver.get(post_url)
+        try:
+            WebDriverWait(driver,5).until(EC.presence_of_element_located((By.CSS_SELECTOR,"article.mbl")))
+        except TimeoutException:
+            return {'LPOST':'','LDATE-TIME':''}
+
+        recent_post=driver.find_element(By.CSS_SELECTOR,"article.mbl")
+        post_data={'LPOST':'','LDATE-TIME':''}
+
+        url_selectors=[
+            ("a[href*='/content/']", lambda h: to_absolute_url(h)),
+            ("a[href*='/comments/text/']", extract_text_comment_url),
+            ("a[href*='/comments/image/']", extract_image_comment_url)
+        ]
+        for selector, formatter in url_selectors:
+            try:
+                link=recent_post.find_element(By.CSS_SELECTOR, selector)
+                href=link.get_attribute('href')
+                if href:
+                    formatted=formatter(href)
+                    if formatted:
+                        post_data['LPOST']=formatted
+                        break
+            except Exception:
+                continue
+
+        time_selectors=["span[itemprop='datePublished']","time[itemprop='datePublished']","span.cxs.cgy","time"]
+        for sel in time_selectors:
+            try:
+                time_elem=recent_post.find_element(By.CSS_SELECTOR, sel)
+                if time_elem.text.strip():
+                    post_data['LDATE-TIME']=parse_post_timestamp(time_elem.text.strip())
+                    break
+            except Exception:
+                continue
+        return post_data
+    except Exception:
+        return {'LPOST':'','LDATE-TIME':''}
 
 class AdaptiveDelay:
     def __init__(self,mn,mx): self.base_min=mn; self.base_max=mx; self.min_delay=mn; self.max_delay=mx; self.hits=0; self.last=time.time()
@@ -265,7 +348,7 @@ class Sheets:
 
     def write_profile(self, profile:dict, old_row:int|None=None):
         nickname=(profile.get("NICK NAME") or "").strip()
-        if not nickname: return
+        if not nickname: return {"status":"error","error":"Missing nickname","changed_fields":[]}
         if profile.get("LAST POST TIME"): profile["LAST POST TIME"]=convert_relative_date_to_absolute(profile["LAST POST TIME"])
         profile["DATETIME SCRAP"]=get_pkt_time().strftime("%d-%b-%y %I:%M %p")
         vals=[]
@@ -286,9 +369,13 @@ class Sheets:
             except Exception as e:
                 log_msg(f"Old row delete failed: {e}")
             self.existing[key]={'row':2,'data':vals}
+            status="updated" if changed else "unchanged"
+            result={"status":status,"changed_fields":[COLUMN_ORDER[i] for i in changed]}
         else:
             self.ws.insert_row(vals,2); self._update_links(2, profile); self.existing[key]={'row':2,'data':vals}
+            result={"status":"new","changed_fields":list(COLUMN_ORDER)}
         time.sleep(SHEET_WRITE_DELAY)
+        return result
 
 # Target processing
 
@@ -305,9 +392,129 @@ def get_pending_targets(sheets:Sheets):
             out.append({'nickname':nick,'row':idx,'source':source})
     return out
 
-def scrape_profile(driver, nickname:str)->dict:
-    url=f"https://damadam.pk/users/{nickname}"; driver.get(url); time.sleep(2)
-    return {"IMAGE":"","NICK NAME":nickname,"TAGS":"","LAST POST":"","LAST POST TIME":"","FRIEND":"","CITY":"","GENDER":"","MARRIED":"","AGE":"","JOINED":"","FOLLOWERS":"","STATUS":"","POSTS":"","PROFILE LINK":url,"INTRO":"","SOURCE":"Target","DATETIME SCRAP":""}
+def scrape_profile(driver, nickname:str)->dict|None:
+    url=f"https://damadam.pk/users/{nickname}/"
+    try:
+        log_msg(f"📍 Scraping: {nickname}")
+        driver.get(url)
+        WebDriverWait(driver,10).until(EC.presence_of_element_located((By.CSS_SELECTOR,"h1.cxl.clb.lsp")))
+
+        page_source=driver.page_source
+        now=get_pkt_time()
+        data={
+            "IMAGE":"",
+            "NICK NAME":nickname,
+            "TAGS":"",
+            "LAST POST":"",
+            "LAST POST TIME":"",
+            "FRIEND":"",
+            "CITY":"",
+            "GENDER":"",
+            "MARRIED":"",
+            "AGE":"",
+            "JOINED":"",
+            "FOLLOWERS":"",
+            "STATUS":"",
+            "POSTS":"",
+            "PROFILE LINK":url.rstrip('/'),
+            "INTRO":"",
+            "SOURCE":"Target",
+            "DATETIME SCRAP":now.strftime("%d-%b-%y %I:%M %p")
+        }
+
+        if 'account suspended' in page_source.lower():
+            data['STATUS']="Suspended"
+        elif 'background:tomato' in page_source or 'style="background:tomato"' in page_source.lower():
+            data['STATUS']="Unverified"
+        else:
+            try:
+                driver.find_element(By.CSS_SELECTOR,"div[style*='tomato']")
+                data['STATUS']="Unverified"
+            except Exception:
+                data['STATUS']="Verified"
+
+        data['FRIEND']=get_friend_status(driver)
+
+        for sel in ["span.cl.sp.lsp.nos","span.cl",".ow span.nos"]:
+            try:
+                intro=driver.find_element(By.CSS_SELECTOR, sel)
+                if intro.text.strip():
+                    data['INTRO']=clean_text(intro.text)
+                    break
+            except Exception:
+                pass
+
+        fields={'City:':'CITY','Gender:':'GENDER','Married:':'MARRIED','Age:':'AGE','Joined:':'JOINED'}
+        for label,key in fields.items():
+            try:
+                elem=driver.find_element(By.XPATH,f"//b[contains(text(), '{label}')]/following-sibling::span[1]")
+                value=elem.text.strip()
+                if not value: continue
+                if key=='JOINED':
+                    data[key]=convert_relative_date_to_absolute(value)
+                elif key=='GENDER':
+                    low=value.lower()
+                    data[key]="💃" if low=='female' else "🕺" if low=='male' else value
+                elif key=='MARRIED':
+                    low=value.lower()
+                    if low in {'yes','married'}:
+                        data[key]="💍"
+                    elif low in {'no','single','unmarried'}:
+                        data[key]="❎"
+                    else:
+                        data[key]=value
+                else:
+                    data[key]=clean_data(value)
+            except Exception:
+                continue
+
+        for sel in ["span.cl.sp.clb",".cl.sp.clb"]:
+            try:
+                followers=driver.find_element(By.CSS_SELECTOR, sel)
+                match=re.search(r'(\d+)', followers.text)
+                if match:
+                    data['FOLLOWERS']=match.group(1)
+                    break
+            except Exception:
+                pass
+
+        for sel in ["a[href*='/profile/public/'] button div:first-child","a[href*='/profile/public/'] button div"]:
+            try:
+                posts=driver.find_element(By.CSS_SELECTOR, sel)
+                match=re.search(r'(\d+)', posts.text)
+                if match:
+                    data['POSTS']=match.group(1)
+                    break
+            except Exception:
+                pass
+
+        for sel in ["img[src*='avatar-imgs']","img[src*='avatar']","div[style*='whitesmoke'] img[src*='cloudfront.net']"]:
+            try:
+                img=driver.find_element(By.CSS_SELECTOR, sel)
+                src=img.get_attribute('src')
+                if src and ('avatar' in src or 'cloudfront.net' in src):
+                    data['IMAGE']=src.replace('/thumbnail/','/')
+                    break
+            except Exception:
+                pass
+
+        if data.get('POSTS') and data['POSTS']!='0':
+            time.sleep(1)
+            post_data=scrape_recent_post(driver, nickname)
+            data['LAST POST']=clean_data(post_data.get('LPOST',''))
+            data['LAST POST TIME']=post_data.get('LDATE-TIME','')
+
+        log_msg(f"✅ Extracted: {data['GENDER']}, {data['CITY']}, Posts: {data['POSTS']}")
+        return data
+    except TimeoutException:
+        log_msg(f"⚠️ Timeout while scraping {nickname}")
+        return None
+    except WebDriverException:
+        log_msg(f"⚠️ Browser issue while scraping {nickname}")
+        return None
+    except Exception as e:
+        log_msg(f"❌ Error scraping {nickname}: {str(e)[:60]}")
+        return None
 
 # Main
 
@@ -323,31 +530,54 @@ def main():
         if not targets: print("No pending targets."); return
         if MAX_PROFILES_PER_RUN>0: targets=targets[:MAX_PROFILES_PER_RUN]
         success=failed=0
+        run_stats={"new":0,"updated":0,"unchanged":0}
         for i,t in enumerate(targets,1):
-            nick=t['nickname']; row=t['row']
+            nick=t['nickname']; row=t['row']; source=t.get('source','Target') or 'Target'
             log_msg(f"[{i}/{len(targets)}] {nick}")
             try:
                 prof=scrape_profile(driver, nick)
-                sheets.write_profile(prof, old_row=row)
-                sheets.update_target_status(row, "Done 💀", f"Done @ {get_pkt_time().strftime('%I:%M %p')}")
-                success+=1
+                if not prof:
+                    raise RuntimeError("Profile scrape failed")
+                prof['SOURCE']=source
+                result=sheets.write_profile(prof, old_row=row)
+                status=result.get("status","error") if result else "error"
+                if status in {"new","updated","unchanged"}:
+                    success+=1
+                    run_stats[status]+=1
+                    changed_fields=result.get("changed_fields",[]) if result else []
+                    cleaned=[field for field in changed_fields if field not in HIGHLIGHT_EXCLUDE_COLUMNS]
+                    if status=="new":
+                        remark_detail="New target profile added"
+                    elif status=="updated":
+                        if cleaned:
+                            trimmed=cleaned[:5]
+                            if len(cleaned)>5: trimmed.append("…")
+                            remark_detail=f"Updated: {', '.join(trimmed)}"
+                        else:
+                            remark_detail="Updated (no key changes)"
+                    else:
+                        remark_detail="No data changes"
+                    sheets.update_target_status(row, "Done 💀", f"{remark_detail} @ {get_pkt_time().strftime('%I:%M %p')}")
+                    log_msg(f"✅ {nick} {status}")
+                else:
+                    raise RuntimeError(result.get("error","Write failed") if result else "Write failed")
             except Exception as e:
                 sheets.update_target_status(row, "⚡ Pending", f"Retry needed: {e}")
                 failed+=1
+                log_msg(f"❌ {nick} failed: {e}")
             if BATCH_SIZE>0 and i% BATCH_SIZE==0 and i<len(targets):
                 log_msg("Batch cool-off"); adaptive.on_batch(); time.sleep(3)
             adaptive.sleep()
         print("\n✅ Done")
-        # Dashboard update
         sheets.update_dashboard({
             "Run Number":1,
             "Last Run": get_pkt_time().strftime("%d-%b-%y %I:%M %p"),
             "Profiles Processed": len(targets),
             "Success": success,
             "Failed": failed,
-            "New Profiles": 0,
-            "Updated Profiles": 0,
-            "Unchanged Profiles": 0,
+            "New Profiles": run_stats.get('new',0),
+            "Updated Profiles": run_stats.get('updated',0),
+            "Unchanged Profiles": run_stats.get('unchanged',0),
             "Trigger": ("Scheduled" if os.getenv('GITHUB_EVENT_NAME','').lower()=='schedule' else "Manual"),
             "Start": get_pkt_time().strftime("%d-%b-%y %I:%M %p"),
             "End": get_pkt_time().strftime("%d-%b-%y %I:%M %p"),
