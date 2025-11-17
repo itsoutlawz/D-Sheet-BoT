@@ -1,23 +1,23 @@
-name: "DDD Target Bot"
-
+name: "DDD Online Bot"
 on:
   schedule:
-    - cron: '58 * * * *'
+    - cron: '*/10 * * * *'
+    
   workflow_dispatch:
     inputs:
       max_profiles:
         description: 'Max Profiles (0 = unlimited)'
         required: false
-        default: '200'
+        default: '0'
       batch_size:
         description: 'Batch Size'
         required: false
-        default: '20'
-
+        default: '10'
+        
 jobs:
-  run-bot:
+ run-jobs:
     runs-on: ubuntu-latest
-    timeout-minutes: 57
+    timeout-minutes: 9
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,5 +71,6 @@ jobs:
           SHEET_WRITE_DELAY: '1.2'
         run: |
           python Scraper.py
+
 
 
