@@ -22,6 +22,6 @@ pip install -r requirements.txt
 python Scraper.py
 ```
 
-## GitHub Actions
+## GitHubs Actions
 - Manual dispatch and schedule supported.
 - The workflow writes GOOGLE_CREDENTIALS_JSON to google_credentials.json and sets GOOGLE_APPLICATION_CREDENTIALS.
