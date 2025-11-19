@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python4
 """
 DamaDam Target Bot - Single File v3.2.1
 - Processes targets from Target sheet (only "⚡ Pending" and variants)
@@ -45,8 +45,17 @@ COLUMN_ORDER = [
     "POSTS", "PROFILE LINK", "INTRO", "SOURCE", "DATETIME SCRAP"
 ]
 COLUMN_TO_INDEX = {name: idx for idx, name in enumerate(COLUMN_ORDER)}
+COLUMN_TLOG_HEADERS = ["Timestamp", "Nickname", "Change Type", "Fields", "Before", "After"]
+DASHBOARD_SHEET_NAME = "Dashboard"
 HIGHLIGHT_EXCLUDE_COLUMNS = {"LAST POST", "LAST POST TIME", "JOINED", "PROFILE LINK", "DATETIME SCRAP"}
 LINK_COLUMNS = {"IMAGE", "LAST POST", "PROFILE LINK"}
+SUSPENSION_INDICATORS = [
+    "accounts suspend",
+    "aik se zyada fake accounts",
+    "abuse ya harassment",
+    "kisi aur user ki identity apnana",
+    "accounts suspend kiye",
+]
 ENABLE_CELL_HIGHLIGHT = False
 
 # Helpers
@@ -79,6 +88,15 @@ def convert_relative_date_to_absolute(text:str)->str:
     if unit in s_map:
         dt=get_pkt_time()-timedelta(seconds=amt*s_map[unit]); return dt.strftime("%d-%b-%y")
     return text
+
+def detect_suspension_reason(page_source:str)->str|None:
+    if not page_source:
+        return None
+    lower=page_source.lower()
+    for indicator in SUSPENSION_INDICATORS:
+        if indicator in lower:
+            return indicator
+    return None
 
 def calculate_eta(processed:int,total:int,start_ts:float)->str:
     if processed==0:
@@ -520,6 +538,7 @@ def scrape_profile(driver, nickname:str)->dict|None:
 
         page_source=driver.page_source
         now=get_pkt_time()
+        suspend_reason=detect_suspension_reason(page_source)
         data={
             "IMAGE":"",
             "NICK NAME":nickname,
@@ -540,6 +559,13 @@ def scrape_profile(driver, nickname:str)->dict|None:
             "SOURCE":"Target",
             "DATETIME SCRAP":now.strftime("%d-%b-%y %I:%M %p")
         }
+
+        if suspend_reason:
+            data['STATUS']='Suspended'
+            data['INTRO']=f"Suspended: {suspend_reason}"[:250]
+            data['SUSPENSION_REASON']=suspend_reason
+            return data
+
 
         if 'account suspended' in page_source.lower():
             data['STATUS']="Suspended"
@@ -664,28 +690,33 @@ def main():
                     if not prof:
                         raise RuntimeError("Profile scrape failed")
                     prof['SOURCE']=source
-                    result=sheets.write_profile(prof, old_row=row)
-                    status=result.get("status","error") if result else "error"
-                    if status in {"new","updated","unchanged"}:
-                        success+=1
-                        run_stats[status]+=1
-                        changed_fields=result.get("changed_fields",[]) if result else []
-                        cleaned=[field for field in changed_fields if field not in HIGHLIGHT_EXCLUDE_COLUMNS]
-                        if status=="new":
-                            remark_detail="New target profile added"
-                        elif status=="updated":
-                            if cleaned:
-                                trimmed=cleaned[:5]
-                                if len(cleaned)>5: trimmed.append("…")
-                                remark_detail=f"Updated: {', '.join(trimmed)}"
-                            else:
-                                remark_detail="Updated (no key changes)"
-                        else:
-                            remark_detail="No data changes"
-                        sheets.update_target_status(row, "Done 💀", f"{remark_detail} @ {get_pkt_time().strftime('%I:%M %p')}")
-                        log_msg(f"✅ {nick} {status}")
+                    if prof.get('SUSPENSION_REASON'):
+                        reason=prof['SUSPENSION_REASON']
+                        sheets.update_target_status(row, "Suspended", f"Suspended: {reason} @ {get_pkt_time().strftime('%I:%M %p')}")
+                        log_msg(f"⚠️ {nick} skipped (suspended: {reason})")
                     else:
-                        raise RuntimeError(result.get("error","Write failed") if result else "Write failed")
+                        result=sheets.write_profile(prof, old_row=row)
+                        status=result.get("status","error") if result else "error"
+                        if status in {"new","updated","unchanged"}:
+                            success+=1
+                            run_stats[status]+=1
+                            changed_fields=result.get("changed_fields",[]) if result else []
+                            cleaned=[field for field in changed_fields if field not in HIGHLIGHT_EXCLUDE_COLUMNS]
+                            if status=="new":
+                                remark_detail="New target profile added"
+                            elif status=="updated":
+                                if cleaned:
+                                    trimmed=cleaned[:5]
+                                    if len(cleaned)>5: trimmed.append("…")
+                                    remark_detail=f"Updated: {', '.join(trimmed)}"
+                                else:
+                                    remark_detail="Updated (no key changes)"
+                            else:
+                                remark_detail="No data changes"
+                            sheets.update_target_status(row, "Done 💀", f"{remark_detail} @ {get_pkt_time().strftime('%I:%M %p')}")
+                            log_msg(f"✅ {nick} {status}")
+                        else:
+                            raise RuntimeError(result.get("error","Write failed") if result else "Write failed")
                 except Exception as e:
                     sheets.update_target_status(row, "⚡ Pending", f"Retry needed: {e}")
                     failed+=1
