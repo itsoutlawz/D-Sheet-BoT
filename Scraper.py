@@ -405,7 +405,7 @@ class Sheets:
         try:
             self.tags_sheet.format("A:D", {"textFormat":{"fontFamily":"Asimovian","fontSize":8,"bold":False}})
             self.tags_sheet.format("A1:D1", {"textFormat":{"bold":True,"fontSize":9,"fontFamily":"Asimovian"},"horizontalAlignment":"CENTER","backgroundColor":{"red":1.0,"green":0.7,"blue":0.2}})
-            self._apply_banding(self.tags, self.dashboard.col_count, start_row=0)
+            self._apply_banding(self.tags_sheet, self.tags_sheet.col_count, start_row=0)
         except Exception as e:
             log_msg(f"Tags format failed: {e}")
 
@@ -811,6 +811,7 @@ def main():
 
 if __name__=='__main__':
     main()
+
 
 
 
