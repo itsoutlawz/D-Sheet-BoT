@@ -34,8 +34,8 @@ GOOGLE_CREDENTIALS_RAW = os.getenv('GOOGLE_CREDENTIALS_JSON', '')
 
 MAX_PROFILES_PER_RUN = int(os.getenv('MAX_PROFILES_PER_RUN', '0'))
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', '10'))
-MIN_DELAY = float(os.getenv('MIN_DELAY', '0.5'))
-MAX_DELAY = float(os.getenv('MAX_DELAY', '0.7'))
+MIN_DELAY = float(os.getenv('MIN_DELAY', '0.3'))
+MAX_DELAY = float(os.getenv('MAX_DELAY', '0.5'))
 PAGE_LOAD_TIMEOUT = int(os.getenv('PAGE_LOAD_TIMEOUT', '30'))
 SHEET_WRITE_DELAY = float(os.getenv('SHEET_WRITE_DELAY', '1.0'))
 
@@ -129,16 +129,22 @@ def to_absolute_url(href:str)->str:
         return f"https://damadam.pk/{href}"
     return href
 
-def get_friend_status(driver)->str:
+def get_friend_status(driver) -> str:
     try:
-        page_source=driver.page_source.lower()
-        if 'action="/follow/remove/"' in page_source or 'unfollow.svg' in page_source:
-            return "Yes"
-        if 'follow.svg' in page_source and 'unfollow' not in page_source:
+        page = driver.page_source.lower()  // poora html lowercase
+
+        // Agar follow.svg mil raha ho → user abhi follow nahi kiya hua
+        if '/static/img/follow.svg' in page:
             return "No"
-        return ""
+
+        // Agar unfollow/remove button ho → already following
+        if 'action="/follow/remove/' in page:
+            return "Yes"
+
+        return ""   // kuch na mila to blank
     except Exception:
         return ""
+
 
 def extract_text_comment_url(href:str)->str:
     m=re.search(r'/comments/text/(\d+)/', href or '')
@@ -361,7 +367,7 @@ class Sheets:
             log_msg(f"Format failed: {e}")
         try:
             self.target.format("A:E", {"textFormat":{"fontFamily":"Asimovian","fontSize":8,"bold":False}})
-            self.target.format("A1:E1", {"textFormat":{"bold":True,"fontSize":9,"fontFamily":"Asimovian"},"horizontalAlignment":"CENTER","backgroundColor":{"red":1.0,"green":0.3,"blue":0.2}})
+            self.target.format("A1:E1", {"textFormat":{"bold":True,"fontSize":9,"fontFamily":"Asimovian"},"horizontalAlignment":"CENTER","backgroundColor":{"red":1.0,"green":0.7,"blue":0.2}})
             self._apply_banding(self.target, self.target.col_count, start_row=0)
         except Exception as e:
             log_msg(f"Target format failed: {e}")
@@ -774,6 +780,7 @@ def main():
 
 if __name__=='__main__':
     main()
+
 
 
 
