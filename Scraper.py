@@ -131,12 +131,15 @@ def to_absolute_url(href:str)->str:
 
 def get_friend_status(driver) -> str:
     try:
-        page = driver.page_source.lower()  
+        page = driver.page_source.lower()   // poora html lowercase
 
-        if '/static/img/follow.svg' in page:
+        if 'action="/follow/add/' in page or '/static/img/follow.svg' in page:
             return "No"
 
         if 'action="/follow/remove/' in page:
+            return "Yes"
+
+        if 'unfollow' in page:
             return "Yes"
 
         return ""
@@ -778,6 +781,7 @@ def main():
 
 if __name__=='__main__':
     main()
+
 
 
 
