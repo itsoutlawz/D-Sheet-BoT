@@ -12,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -26,38 +25,12 @@ LOGIN_URL = "https://damadam.pk/login/"
 HOME_URL = "https://damadam.pk/"
 COOKIE_FILE = "damadam_cookies.pkl"
 
-# For local testing - hardcoded credentials
-# Replace these with your actual credentials for local testing
-USERNAME = '0utLawZ'  # Replace with actual username
-PASSWORD = 'asdasd'  # Replace with actual password
-USERNAME_2 = 'your_second_username_here'  # Replace with actual second username if needed
-PASSWORD_2 = 'your_second_password_here'  # Replace with actual second password if needed
-SHEET_URL = 'https://docs.google.com/spreadsheets/d/1jn1DroWU8GB5Sc1rQ7wT-WusXK9v4V05ISYHgUEjYZc/edit'  # Replace with your Google Sheet URL
-
-# Uncomment to use environment variables instead
-# USERNAME = os.getenv('DAMADAM_USERNAME', '')
-# PASSWORD = os.getenv('DAMADAM_PASSWORD', '')
-# USERNAME_2 = os.getenv('DAMADAM_USERNAME_2', '')
-# PASSWORD_2 = os.getenv('DAMADAM_PASSWORD_2', '')
-# SHEET_URL = os.getenv('GOOGLE_SHEET_URL', '')
-# For local testing - Google Service Account JSON
-# Replace this with your actual service account JSON
-GOOGLE_CREDENTIALS_RAW = '''{
-  "type": "service_account",
-  "project_id": "causal-medium-480220-b2",
-  "private_key_id": "3bbf9a87b387cf609397f0cd2367f98daa4c8baa",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCjg8yfhrgw8OAt\n5axsIQxJokXBZZ+omW90QwGlfJnL6JbtAY5NKfTc5Q0CctHDwHGfq8aidHh4ilQb\nJtsjlL62qtspNyJc1LU6lavtEq47NRkYXrsvUUC+FI03z4seURolBXMXuDHi3G7C\n2Xmyz1sqLb5UMPe/bRpM3VwpJABGRC66tWefB50QZ+CeOhvA0MYgNuQXVvuuOqj+\n9OBREa2EkPso8oqORf9EWKdmpSzugXgvqPSOYUsai3wpad6FxKMuZEFzQJkpGqwe\n7VpaSXbUIBWgqDRZn0O/Ksk7CIu3ZbVCJuDK3drp0ubLQiJSRTwnmqrFHdVHdWCf\nfGpMjmw3AgMBAAECggEAERu0KCjHUs+RFRxHuxSGHZot5DtGxjQvliGApZjw2oXe\nbLPR+L7gENCiWNQ8oFedS9CEOvEmva3zeNfK6+EfRyt/PMO5A695usR4NZjTw/wd\nQRCAU0YUGQ87a1B6xNRFgQQd86hhB9R6fkaU1iGd7z7UACkTcuLucoZioydSJAfJ\nK4bMD+BiYZPESvZ8s/0szUSrH1dIsqoFe9+eT9PfzOANCQtd7i2xVske0APVBefr\n4FGf0QKT7S81X6+SPBOFZ08OSe+KAr3ESohh3dJ7+rjQHB1esrPVhMzpxdkJnDN9\nH0aFXMTzEQUoFvpRDEUFvMAUlHfppf2j2UyFESK0+QKBgQDksrJTEpvbtgxb8F0R\ncrnleW4No2CYl1VPCu6tIduspqw08Ct+3nFTDqWCIJ5bLbabI6R63x/x9DaNO2X7\nX1VgfbXgOHDZdTMmlzy/I4WVGWwpyrI0t2Fsbs4Sgw11tLFd/aiIOHGDy2LMreNp\nwJipmRdDQuvMocmDxPlqVuUa3QKBgQC3CQVymvbtXw5agG+gXtHRN0mNF1JDzi31\n8GYkRX4SdeLpM0Y+cNy3sNkOAmP3bticTPXMSAMArUCQvV7yu0t5/QMkrJMx5bdl\nj5Rd51eoVs3zC0GR3md/Z93UvoV3aAaJ3TQQiysyyz/Jngum0D5TGOFcqUQP0aPh\nExiyKw7AIwKBgQDAflBub8lUA0Uf1Y7gcspZhf3F6PATP72ETFVc0JTQG3HzFPvn\nS1/jYv6YKtBfOnjq1/NHoKqIwt9vvME39aQtFWKSma8Suf0VzFJLJ6D2QHG0M3IP\nwRJ1bEZzem9H1ZE85ZaHIcsZ/YTpdqtlhcB5b+wOpzNGCB9Pk+nDQeSQ2QKBgF8T\nBotjR0RBjfkgodsRpbchGsl5BbhGzsTjXIsWtcftCDLN+XzRrzSTXgvS3g5Wu5lk\nuICmHzkoxVLpqvo2o5v3+rwAEG1ov3y3uf+U/YlpnYzTmfmlJumdEDNDy5wcotjV\n2AeH4qZ9wOJ/f9nkbZtIXzd8jOgSoyd0fe1+RCk1AoGAXGAAf3430R2YX0vgFft7\n1POA1f+wW4G3TD7vS9jS8l47K6ZuAcOt26RfvhRI0W+HP2qRWY500HbiAzFI87pF\nzs9UfYuVOJy9GuHciA/7fcH3O5jRRO6NOHwMdjvCv15r1gvPit39QVRx5e/qPA5p\nkWyh095NJ0vgXiPALybAXV0=\n-----END PRIVATE KEY-----\n",
-  "client_email": "d-sheet-admin@causal-medium-480220-b2.iam.gserviceaccount.com",
-  "client_id": "111728326417530082218",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/d-sheet-admin%40causal-medium-480220-b2.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}'''
-
-# Uncomment to use environment variable instead
-# GOOGLE_CREDENTIALS_RAW = os.getenv('GOOGLE_CREDENTIALS_JSON', '')
+USERNAME = os.getenv('DAMADAM_USERNAME', '')
+PASSWORD = os.getenv('DAMADAM_PASSWORD', '')
+USERNAME_2 = os.getenv('DAMADAM_USERNAME_2', '')
+PASSWORD_2 = os.getenv('DAMADAM_PASSWORD_2', '')
+SHEET_URL = os.getenv('GOOGLE_SHEET_URL', '')
+GOOGLE_CREDENTIALS_RAW = os.getenv('GOOGLE_CREDENTIALS_JSON', '')
 
 MAX_PROFILES_PER_RUN = int(os.getenv('MAX_PROFILES_PER_RUN', '0'))
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', '10'))
@@ -299,119 +272,40 @@ def load_cookies(driver):
 
 def login(driver)->bool:
     try:
-        driver.get(HOME_URL)
-        time.sleep(2)
-        if load_cookies(driver):
-            driver.refresh()
-            time.sleep(3)
-            if 'login' not in driver.current_url.lower():
-                return True
-        
-        driver.get(LOGIN_URL)
-        time.sleep(3)
-        
-        for label, u, p in [("Account 1", USERNAME, PASSWORD), ("Account 2", USERNAME_2, PASSWORD_2)]:
-            if not u or not p:
-                continue
-                
+        driver.get(HOME_URL); time.sleep(2)
+        if load_cookies(driver): driver.refresh(); time.sleep(3); 
+        if 'login' not in driver.current_url.lower(): return True
+        driver.get(LOGIN_URL); time.sleep(3)
+        for label,u,p in [("Account 1",USERNAME,PASSWORD),("Account 2",USERNAME_2,PASSWORD_2)]:
+            if not u or not p: continue
             try:
-                # Wait for login form to be present
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#nick, input[name='nick']"))
-                )
-                
-                # Fill in credentials
-                nick = driver.find_element(By.CSS_SELECTOR, "#nick, input[name='nick']")
-                pw = driver.find_element(By.CSS_SELECTOR, "#pass, input[name='pass']")
-                
-                # Clear and enter credentials
-                nick.clear()
-                nick.send_keys(u)
-                pw.clear()
-                pw.send_keys(p)
-                
-                # Submit the form
-                pw.send_keys(Keys.RETURN)
-                time.sleep(5)  # Wait for login to complete
-                
-                # Check if login was successful
-                if 'login' not in driver.current_url.lower():
-                    save_cookies(driver)
-                    return True
-                    
-            except Exception as e:
-                print(f"⚠️ Login attempt with {label} failed: {str(e)}")
-                continue
-                
+                nick=WebDriverWait(driver,8).until(EC.presence_of_element_located((By.CSS_SELECTOR,"#nick, input[name='nick']")))
+                try: pw=driver.find_element(By.CSS_SELECTOR,"#pass, input[name='pass']")
+                except: pw=WebDriverWait(driver,8).until(EC.presence_of_element_located((By.CSS_SELECTOR,"input[type='password']")))
+                btn=driver.find_element(By.CSS_SELECTOR,"button[type='submit'], form button")
+                nick.clear(); nick.send_keys(u); time.sleep(0.5)
+                pw.clear(); pw.send_keys(p); time.sleep(0.5)
+                btn.click(); time.sleep(4)
+                if 'login' not in driver.current_url.lower(): save_cookies(driver); return True
+            except: continue
         return False
-        
     except Exception as e:
-        print(f"❌ Login error: {str(e)}")
-        return False
+        log_msg(f"Login error: {e}"); return False
+
+# Google Sheets
 
 def gsheets_client():
-    if not SHEET_URL: 
-        print("❌ GOOGLE_SHEET_URL is not set.")
-        sys.exit(1)
-        
-    scope = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    
+    if not SHEET_URL: print("❌ GOOGLE_SHEET_URL is not set."); sys.exit(1)
+    scope=["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
+    gac=os.getenv('GOOGLE_APPLICATION_CREDENTIALS','').strip()
     try:
-        # First try to use credentials.json file
-        if os.path.exists('credentials.json'):
-            try:
-                client = gspread.service_account('credentials.json', scopes=scope)
-                # Test the connection
-                client.open_by_url(SHEET_URL)
-                print("✅ Successfully authenticated with credentials.json")
-                return client
-            except Exception as e:
-                print(f"⚠️ Could not use credentials.json: {str(e)}")
-                print("Falling back to other authentication methods...")
-        
-        # Then try to use the raw credentials from the config
-        if GOOGLE_CREDENTIALS_RAW:
-            try:
-                cred_info = json.loads(GOOGLE_CREDENTIALS_RAW)
-                cred = Credentials.from_service_account_info(cred_info, scopes=scope)
-                client = gspread.authorize(cred)
-                # Test the connection
-                client.open_by_url(SHEET_URL)
-                print("✅ Successfully authenticated with provided service account credentials")
-                return client
-            except Exception as e:
-                print(f"⚠️ Could not use inline credentials: {str(e)}")
-                print("Falling back to application default credentials...")
-        
-        # Finally, try application default credentials
-        try:
-            from google.auth import default
-            cred, project = default(scopes=scope)
-            client = gspread.authorize(cred)
-            # Test the connection
-            client.open_by_url(SHEET_URL)
-            print("✅ Successfully authenticated with default application credentials")
-            return client
-        except Exception as e:
-            print("⚠️ Could not use application default credentials")
-            raise e
-        
+        if gac and os.path.exists(gac): cred=Credentials.from_service_account_file(gac, scopes=scope)
+        else:
+            if not GOOGLE_CREDENTIALS_RAW: print("❌ GOOGLE_SHEET_URL is set but GOOGLE_CREDENTIALS_JSON is missing."); sys.exit(1)
+            cred=Credentials.from_service_account_info(json.loads(GOOGLE_CREDENTIALS_RAW), scopes=scope)
+        return gspread.authorize(cred)
     except Exception as e:
-        print(f"❌ Google authentication failed: {e}")
-        if 'invalid_grant' in str(e):
-            print("⚠️  The service account credentials are invalid or have expired.")
-            print("    Please check if the service account is still active and has the correct permissions.")
-        elif 'insufficient authentication scopes' in str(e).lower():
-            print("⚠️  The service account is missing required permissions.")
-            print("    Please ensure the service account has been granted the following scopes:")
-            print("    - https://www.googleapis.com/auth/spreadsheets")
-            print("    - https://www.googleapis.com/auth/drive")
-            print("\nAlso, make sure to share your Google Sheet with the service account email:")
-            print("    d-sheet-admin@causal-medium-480220-b2.iam.gserviceaccount.com")
-        sys.exit(1)
+        print(f"❌ Google auth failed: {e}"); sys.exit(1)
 
 class Sheets:
     def __init__(self, client):
@@ -493,29 +387,13 @@ class Sheets:
 
         # ---------------- PROFILES TARGET ----------------
         try:
-            # Set column widths using gspread's format method
-            self.ws.format("A:R", {
-                "columnWidths": [
-                    {"width": 50},   # A
-                    {"width": 160},  # B
-                    {"width": 140},  # C
-                    {"width": 250},  # D
-                    {"width": 100},  # E
-                    {"width": 60},   # F
-                    {"width": 100},  # G
-                    {"width": 60},   # H
-                    {"width": 60},   # I
-                    {"width": 40},   # J
-                    {"width": 70},   # K
-                    {"width": 40},   # L
-                    {"width": 50},   # M
-                    {"width": 50},   # N
-                    {"width": 50},   # O
-                    {"width": 250},  # P
-                    {"width": 50},   # Q
-                    {"width": 120}   # R
-                ]
-            })
+            col_widths = {
+                "A": 50, "B": 160, "C": 140, "D": 250, "E": 100, "F": 60,
+                "G": 100, "H": 60, "I": 60, "J": 40, "K": 70, "L": 40,
+                "M": 50, "N": 50, "O": 50, "P": 250, "Q": 50, "R": 120
+            }
+            for col, w in col_widths.items():
+                self.ws.set_column_width(col, w)
 
             self.ws.format(
                 "A:R",
@@ -542,16 +420,9 @@ class Sheets:
 
         # ---------------- TARGET SHEET ----------------
         try:
-            # Set column widths for Target sheet
-            self.target.format("A:E", {
-                "columnWidths": [
-                    {"width": 250},  # A
-                    {"width": 110},  # B
-                    {"width": 280},  # C
-                    {"width": 80},   # D
-                    {"width": 90}    # E
-                ]
-            })
+            col_widths = {"A":250, "B":110, "C":280, "D":80, "E":90}
+            for col, w in col_widths.items():
+                self.target.set_column_width(col, w)
 
             self.target.format(
                 "A:E",
@@ -1040,24 +911,3 @@ def main():
 
 if __name__=='__main__':
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
