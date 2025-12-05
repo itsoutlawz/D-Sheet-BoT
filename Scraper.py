@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -492,13 +493,29 @@ class Sheets:
 
         # ---------------- PROFILES TARGET ----------------
         try:
-            col_widths = {
-                "A": 50, "B": 160, "C": 140, "D": 250, "E": 100, "F": 60,
-                "G": 100, "H": 60, "I": 60, "J": 40, "K": 70, "L": 40,
-                "M": 50, "N": 50, "O": 50, "P": 250, "Q": 50, "R": 120
-            }
-            for col, w in col_widths.items():
-                self.ws.set_column_width(col, w)
+            # Set column widths using gspread's format method
+            self.ws.format("A:R", {
+                "columnWidths": [
+                    {"width": 50},   # A
+                    {"width": 160},  # B
+                    {"width": 140},  # C
+                    {"width": 250},  # D
+                    {"width": 100},  # E
+                    {"width": 60},   # F
+                    {"width": 100},  # G
+                    {"width": 60},   # H
+                    {"width": 60},   # I
+                    {"width": 40},   # J
+                    {"width": 70},   # K
+                    {"width": 40},   # L
+                    {"width": 50},   # M
+                    {"width": 50},   # N
+                    {"width": 50},   # O
+                    {"width": 250},  # P
+                    {"width": 50},   # Q
+                    {"width": 120}   # R
+                ]
+            })
 
             self.ws.format(
                 "A:R",
@@ -525,9 +542,16 @@ class Sheets:
 
         # ---------------- TARGET SHEET ----------------
         try:
-            col_widths = {"A":250, "B":110, "C":280, "D":80, "E":90}
-            for col, w in col_widths.items():
-                self.target.set_column_width(col, w)
+            # Set column widths for Target sheet
+            self.target.format("A:E", {
+                "columnWidths": [
+                    {"width": 250},  # A
+                    {"width": 110},  # B
+                    {"width": 280},  # C
+                    {"width": 80},   # D
+                    {"width": 90}    # E
+                ]
+            })
 
             self.target.format(
                 "A:E",
