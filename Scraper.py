@@ -383,7 +383,7 @@ class Sheets:
             else:
                 log_msg(f"Banding failed: {e}")
 
-        def _format(self):
+    def _format(self):
 
         # --- ProfilesTarget SHEET ---
         try:
@@ -506,7 +506,6 @@ class Sheets:
 
         except Exception as e:
             log_msg(f"Tags format failed: {e}")
-
 
 
     # ========== SHEET: Target ==========
@@ -1039,6 +1038,7 @@ def main():
 
 if __name__=='__main__':
     main()
+
 
 
 
