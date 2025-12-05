@@ -18,10 +18,10 @@ on:
 
 env:
   PYTHON_VERSION: '3.10'
-  MIN_DELAY: '0.3'
-  MAX_DELAY: '0.4'
+  MIN_DELAY: '0.5'
+  MAX_DELAY: '1.0'
   PAGE_LOAD_TIMEOUT: '30'
-  SHEET_WRITE_DELAY: '1.0'
+  SHEET_WRITE_DELAY: '2.0'
 
 jobs:
   run-bot:
