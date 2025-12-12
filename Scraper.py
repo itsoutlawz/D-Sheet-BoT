@@ -91,6 +91,7 @@ def _normalize_cred_path(p: str) -> str:
 
 MAX_PROFILES_PER_RUN = int(os.getenv('MAX_PROFILES_PER_RUN', '0'))
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', '20'))
+APPLY_FONT_FORMATTING = os.getenv('APPLY_FONT_FORMATTING', '').strip().lower() in {"1","true","yes","y","on"}
 MIN_DELAY = float(os.getenv('MIN_DELAY', '0.3'))
 MAX_DELAY = float(os.getenv('MAX_DELAY', '0.5'))
 PAGE_LOAD_TIMEOUT = int(os.getenv('PAGE_LOAD_TIMEOUT', '30'))
@@ -449,6 +450,34 @@ class Sheets:
             log_msg(f"Dashboard setup failed: {e}")
         self._load_existing(); self._load_tags_mapping(); self.normalize_target_statuses()
 
+    def apply_quantico_font(self):
+        try:
+            sheets = self.ss.worksheets()
+            reqs = []
+            for ws in sheets:
+                reqs.append({
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": ws.id,
+                            "startRowIndex": 0,
+                            "startColumnIndex": 0,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "textFormat": {
+                                    "fontFamily": "Quantico"
+                                }
+                            }
+                        },
+                        "fields": "userEnteredFormat.textFormat.fontFamily",
+                    }
+                })
+            if reqs:
+                self.ss.batch_update({"requests": reqs})
+                log_msg("Applied Quantico font to all sheets")
+        except Exception as e:
+            log_msg(f"Quantico font apply failed: {e}")
+
     def _get_or_create(self,name,cols=20,rows=1000):
         try: return self.ss.worksheet(name)
         except WorksheetNotFound:
@@ -797,6 +826,8 @@ def main():
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--max-profiles", type=int, default=None, help="Max profiles to scrape (0 = all)")
     parser.add_argument("--profiles-to-scrape", dest="max_profiles", type=int, default=None, help="Alias for --max-profiles (0 = all)")
+    parser.add_argument("--apply-font", action="store_true", help="Apply Quantico font to all Google Sheets")
+    parser.add_argument("--apply-font-only", action="store_true", help="Apply Quantico font to all Google Sheets and exit")
     args = parser.parse_args()
 
     is_interactive = sys.stdin.isatty() and not os.getenv('GITHUB_ACTIONS')
@@ -834,6 +865,17 @@ def main():
     else:
         with Status("🔌 Connecting to Google Sheets...", console=console, spinner="dots"):
             client = gsheets_client(); sheets = Sheets(client)
+
+    if args.apply_font or APPLY_FONT_FORMATTING:
+        if IS_CI:
+            sheets.apply_quantico_font()
+        else:
+            with Status("🔤 Applying Quantico font...", console=console, spinner="dots"):
+                sheets.apply_quantico_font()
+
+    if args.apply_font_only:
+        log_msg("Font formatting complete (apply-font-only). Exiting.")
+        return
 
     log_msg("Setting up browser...")
     if IS_CI:
