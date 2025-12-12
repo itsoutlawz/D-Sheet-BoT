@@ -1,0 +1,67 @@
+name: Run DamaDam Scraper
+
+on:
+  schedule:
+    # Run at minute 0 of every hour
+    - cron: '0 * * * *'
+  # Allow manual triggering from GitHub UI
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Install Chrome and ChromeDriver
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget unzip xvfb libnss3-dev libgdk-pixbuf2.0-dev libgtk-3-dev libxss-dev
+        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1-3)
+        CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION%.*}")
+        wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
+        unzip chromedriver_linux64.zip
+        sudo mv chromedriver /usr/local/bin/chromedriver
+        sudo chmod +x /usr/local/bin/chromedriver
+        
+    - name: Run Scraper
+      env:
+        DAMADAM_USERNAME: ${{ secrets.DAMADAM_USERNAME }}
+        DAMADAM_PASSWORD: ${{ secrets.DAMADAM_PASSWORD }}
+        DAMADAM_USERNAME_2: ${{ secrets.DAMADAM_USERNAME_2 }}
+        DAMADAM_PASSWORD_2: ${{ secrets.DAMADAM_PASSWORD_2 }}
+        GOOGLE_SHEET_URL: ${{ secrets.GOOGLE_SHEET_URL }}
+        GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      run: |
+        # Write service account JSON from secret
+        echo "$GOOGLE_CREDENTIALS_JSON" > service-account.json
+        export GOOGLE_APPLICATION_CREDENTIALS=service-account.json
+        
+        # Run the scraper with Xvfb for headless Chrome
+        xvfb-run -a python Scraper.py
+        
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: error-logs
+        path: |
+          *.log
+          *.pkl
+        retention-days: 5

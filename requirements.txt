@@ -1,6 +1,24 @@
+# Core Dependencies
 selenium>=4.24.0
 gspread>=6.1.2
 google-auth>=2.35.0
 python-dotenv>=1.0.1
-colorama
-rich
+
+# UI and Logging
+colorama>=0.4.6
+rich>=13.0.0
+
+# Date/Time
+python-dateutil>=2.8.2
+pytz>=2023.3
+
+# HTTP/API
+requests>=2.31.0
+urllib3>=2.0.0
+
+# Development
+pytest>=7.4.0
+pytest-cov>=4.1.0
+black>=23.7.0
+flake8>=6.0.0
+mypy>=1.4.0
