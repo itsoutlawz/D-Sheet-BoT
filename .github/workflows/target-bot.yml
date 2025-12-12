@@ -55,12 +55,12 @@ jobs:
         env:
           DAMADAM_USERNAME: ${{ secrets.DAMADAM_USERNAME }}
           DAMADAM_PASSWORD: ${{ secrets.DAMADAM_PASSWORD }}
-          DAMADAM_USERNAME_2: ${{ secrets.DAMADAM_USERNAME_2 || '' }}
-          DAMADAM_PASSWORD_2: ${{ secrets.DAMADAM_PASSWORD_2 || '' }}
+          DAMADAM_USERNAME_2: ${{ secrets.DAMADAM_USERNAME_2 }}
+          DAMADAM_PASSWORD_2: ${{ secrets.DAMADAM_PASSWORD_2 }}
           GOOGLE_SHEET_URL: ${{ secrets.GOOGLE_SHEET_URL }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-          MAX_PROFILES_PER_RUN: ${{ github.event.inputs.max_profiles || '0' }}
-          BATCH_SIZE: ${{ github.event.inputs.batch_size || '10' }}
+          MAX_PROFILES_PER_RUN: ${{ github.event.inputs.max_profiles }}
+          BATCH_SIZE: ${{ github.event.inputs.batch_size }}
         run: |
           set -e  # Exit immediately if a command exits with a non-zero status
           
@@ -82,11 +82,11 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS="$PWD/credentials.json"
           
           echo "🚀 Starting bot with:"
-          echo "- Max Profiles: ${MAX_PROFILES:-0}"
+          echo "- Max Profiles: ${MAX_PROFILES_PER_RUN:-0}"
           echo "- Batch Size: ${BATCH_SIZE:-10}"
           
           # Run the bot
-          python Scraper.py
+          python Scraper.py --max-profiles "${MAX_PROFILES_PER_RUN:-0}" --batch-size "${BATCH_SIZE:-10}"
           
 
           echo "✅ Bot completed successfully"
