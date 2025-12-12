@@ -35,6 +35,7 @@ SCHEDULE:
 
 # ==================== IMPORTS & CONFIG ====================
 
+import warnings
 import os, sys, re, time, json, random, argparse
 from datetime import datetime, timedelta, timezone
 from colorama import Fore, Style, init as colorama_init
@@ -48,6 +49,7 @@ console = Console()
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -56,6 +58,8 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound, APIError
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 LOGIN_URL = "https://damadam.pk/login/"
 HOME_URL = "https://damadam.pk/"
@@ -67,7 +71,21 @@ USERNAME_2 = os.getenv('DAMADAM_USERNAME_2', '')
 PASSWORD_2 = os.getenv('DAMADAM_PASSWORD_2', '')
 GOOGLE_CREDENTIALS_RAW = os.getenv('GOOGLE_CREDENTIALS_JSON', '')
 GOOGLE_SHEET_URL = os.getenv('GOOGLE_SHEET_URL', '').strip()
-GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS', 'credentials.json').strip() or 'credentials.json'
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '').strip()
+if not CHROMEDRIVER_PATH:
+    CHROMEDRIVER_PATH = os.path.join(SCRIPT_DIR, 'chromedriver.exe')
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '').strip()
+if not GOOGLE_APPLICATION_CREDENTIALS:
+    GOOGLE_APPLICATION_CREDENTIALS = 'credentials.json'
+
+def _normalize_cred_path(p: str) -> str:
+    p = (p or "").strip().strip('"').strip("'")
+    if not p:
+        return ""
+    if os.path.isabs(p):
+        return p
+    return os.path.join(SCRIPT_DIR, p)
 
 MAX_PROFILES_PER_RUN = int(os.getenv('MAX_PROFILES_PER_RUN', '0'))
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', '10'))
@@ -272,7 +290,13 @@ def setup_browser():
         opts.add_experimental_option('excludeSwitches',['enable-automation']); opts.add_experimental_option('useAutomationExtension',False)
         opts.add_argument("--no-sandbox"); opts.add_argument("--disable-dev-shm-usage"); opts.add_argument("--disable-gpu")
         opts.add_argument("--log-level=3")  # Suppress DevTools/Chrome noise
-        driver=webdriver.Chrome(options=opts); driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
+        driver=None
+        if CHROMEDRIVER_PATH and os.path.exists(CHROMEDRIVER_PATH):
+            service = Service(executable_path=CHROMEDRIVER_PATH)
+            driver = webdriver.Chrome(service=service, options=opts)
+        else:
+            driver = webdriver.Chrome(options=opts)
+        driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
         driver.execute_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined})")
         return driver
     except Exception as e:
@@ -324,12 +348,26 @@ def gsheets_client():
         print("[ERROR] GOOGLE_SHEET_URL is not set."); sys.exit(1)
     scope=["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
     try:
-        if GOOGLE_APPLICATION_CREDENTIALS and os.path.exists(GOOGLE_APPLICATION_CREDENTIALS):
-            cred=Credentials.from_service_account_file(GOOGLE_APPLICATION_CREDENTIALS, scopes=scope)
+        cred_path = _normalize_cred_path(GOOGLE_APPLICATION_CREDENTIALS)
+        fallback_path = os.path.join(SCRIPT_DIR, 'credentials.json')
+        chosen_path = None
+ 
+        if cred_path and os.path.exists(cred_path):
+            chosen_path = cred_path
+        elif os.path.exists(fallback_path):
+            chosen_path = fallback_path
+ 
+        if chosen_path:
+            cred = Credentials.from_service_account_file(chosen_path, scopes=scope)
         else:
             if not GOOGLE_CREDENTIALS_RAW:
-                print("[ERROR] GOOGLE_SHEET_URL is set but GOOGLE_CREDENTIALS_JSON is missing."); sys.exit(1)
-            cred=Credentials.from_service_account_info(json.loads(GOOGLE_CREDENTIALS_RAW), scopes=scope)
+                print(
+                    "[ERROR] Google credentials not found. "
+                    f"Checked GOOGLE_APPLICATION_CREDENTIALS: {cred_path or '(empty)'} and fallback: {fallback_path}. "
+                    "Also GOOGLE_CREDENTIALS_JSON is missing."
+                )
+                sys.exit(1)
+            cred = Credentials.from_service_account_info(json.loads(GOOGLE_CREDENTIALS_RAW), scopes=scope)
         return gspread.authorize(cred)
     except Exception as e:
         print(f"[ERROR] Google auth failed: {e}"); sys.exit(1)
@@ -347,8 +385,6 @@ class Sheets:
             if not vals or not vals[0] or all(not c for c in vals[0]):
                 log_msg("Initializing ProfilesTarget headers...")
                 self.ws.append_row(COLUMN_ORDER)
-                try: self.ws.freeze(rows=1)
-                except: pass
         except Exception as e:
             log_msg(f"Header init failed: {e}")
         # Ensure headers for Target sheet
@@ -368,7 +404,7 @@ class Sheets:
                 self.dashboard.clear(); self.dashboard.append_row(expected)
         except Exception as e:
             log_msg(f"Dashboard setup failed: {e}")
-        self._format(); self._load_existing(); self._load_tags_mapping(); self.normalize_target_statuses()
+        self._load_existing(); self._load_tags_mapping(); self.normalize_target_statuses()
 
     def _get_or_create(self,name,cols=20,rows=1000):
         try: return self.ss.worksheet(name)
@@ -381,34 +417,6 @@ class Sheets:
         except WorksheetNotFound:
             log_msg(f"{name} sheet not found, skipping optional features")
             return None
-
-    def _apply_banding(self, sheet, end_col, start_row=1):
-        try:
-            end_col=max(end_col,1)
-            req={
-                "addBanding":{
-                    "bandedRange":{
-                        "range":{
-                            "sheetId":sheet.id,
-                            "startRowIndex":start_row,
-                            "startColumnIndex":0,
-                            "endColumnIndex":end_col
-                        },
-                        "rowProperties":{
-                            "headerColor":{"red":1.0,"green":0.6,"blue":0.0},
-                            "firstBandColor":{"red":1.0,"green":0.98,"blue":0.95},
-                            "secondBandColor":{"red":1.0,"green":1.0,"blue":1.0}
-                        }
-                    }
-                }
-            }
-            self.ss.batch_update({"requests":[req]})
-        except APIError as e:
-            msg=str(e)
-            if "already has alternating background colors" in msg:
-                log_msg(f"Banding already applied on {sheet.title}; skipping")
-            else:
-                log_msg(f"Banding failed: {e}")
 
     def _format(self):
         pass  # Formatting disabled as per user request
@@ -448,8 +456,7 @@ class Sheets:
             log_msg(f"Tags load failed: {e}")
 
     def _highlight(self,row_idx,indices):
-        for idx in indices:
-            rng=f"{column_letter(idx)}{row_idx}:{column_letter(idx)}{row_idx}"; self.ws.format(rng,{"backgroundColor":{"red":1.0,"green":0.93,"blue":0.85}}); time.sleep(SHEET_WRITE_DELAY)
+        return  # Formatting disabled as per user request
 
     def _add_notes(self,row_idx,indices,before,new_vals):
         if not indices: return
