@@ -41,9 +41,11 @@ from datetime import datetime, timedelta, timezone
 from colorama import Fore, Style, init as colorama_init
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+from rich.progress import TimeRemainingColumn
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from rich.status import Status
 colorama_init(autoreset=True)
 console = Console()
 
@@ -117,11 +119,52 @@ TARGET_STATUS_ERROR = "Error 💥"
 
 # ==================== HELPERS (TIME / TEXT / URL) ====================
 
+IS_CI = bool(os.getenv('GITHUB_ACTIONS'))
+
+def _print_rich(msg: str, style: str | None = None) -> None:
+    if IS_CI:
+        print(msg)
+        sys.stdout.flush()
+        return
+    if style:
+        console.print(msg, style=style)
+    else:
+        console.print(msg)
+
 def get_pkt_time():
     return datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=5)
 
 def log_msg(m):
-    print(f"[{get_pkt_time().strftime('%H:%M:%S')}] {m}"); sys.stdout.flush()
+    ts = get_pkt_time().strftime('%H:%M:%S')
+    text = str(m)
+    style = None
+    icon = "ℹ️"
+    upper = text.upper()
+    if "[OK]" in upper:
+        style = "green"
+        icon = "✅"
+    elif "[ERROR]" in upper or "FATAL" in upper:
+        style = "red"
+        icon = "❌"
+    elif "[SCRAPING]" in upper:
+        style = "cyan"
+        icon = "🕵️"
+    elif "[TIMEOUT]" in upper:
+        style = "yellow"
+        icon = "⏱️"
+    elif "[BROWSER_ERROR]" in upper:
+        style = "red"
+        icon = "🧯"
+    elif "[COMPLETE]" in upper:
+        style = "magenta"
+        icon = "🏁"
+
+    if IS_CI:
+        print(f"[{ts}] {text}")
+        sys.stdout.flush()
+        return
+
+    _print_rich(f"[bold]{ts}[/bold] {icon} {text}", style=style)
 
 def column_letter(i:int)->str:
     res=""; i+=1
@@ -786,15 +829,34 @@ def main():
     print("="*70)
     if not USERNAME or not PASSWORD: print("[ERROR] Missing DAMADAM_USERNAME / DAMADAM_PASSWORD"); sys.exit(1)
     log_msg("Connecting to Google Sheets...")
-    client=gsheets_client(); sheets=Sheets(client)
+    if IS_CI:
+        client = gsheets_client(); sheets = Sheets(client)
+    else:
+        with Status("🔌 Connecting to Google Sheets...", console=console, spinner="dots"):
+            client = gsheets_client(); sheets = Sheets(client)
+
     log_msg("Setting up browser...")
-    driver=setup_browser(); 
+    if IS_CI:
+        driver = setup_browser()
+    else:
+        with Status("🌐 Launching Chrome...", console=console, spinner="dots"):
+            driver = setup_browser()
     if not driver: print("[ERROR] Browser setup failed"); sys.exit(1)
     try:
         log_msg("Logging in...")
-        if not login(driver): print("[ERROR] Login failed"); driver.quit(); sys.exit(1)
+        if IS_CI:
+            ok = login(driver)
+        else:
+            with Status("🔐 Logging in...", console=console, spinner="dots"):
+                ok = login(driver)
+        if not ok: print("[ERROR] Login failed"); driver.quit(); sys.exit(1)
+
         log_msg("Fetching pending targets...")
-        targets=get_pending_targets(sheets)
+        if IS_CI:
+            targets = get_pending_targets(sheets)
+        else:
+            with Status("📥 Reading Target sheet...", console=console, spinner="dots"):
+                targets = get_pending_targets(sheets)
         if not targets: log_msg("No pending targets."); return
         # Enforce max profiles strictly
         to_process = targets[:args.max_profiles] if args.max_profiles > 0 else targets
@@ -812,6 +874,7 @@ def main():
                 BarColumn(bar_width=30),
                 TextColumn("{task.completed}/{task.total}"),
                 TimeElapsedColumn(),
+                TimeRemainingColumn(),
                 console=console,
                 transient=False,
             ) as progress:
